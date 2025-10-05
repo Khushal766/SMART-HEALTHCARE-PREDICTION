@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Healthcare Risk Predictor</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for professional look and feel */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7fa;
+        }
+
+        /* Custom scrollbar for better look in results area */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #a8a8a8;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background-color: #e0e0e0;
+        }
+        
+        .loading-dot {
+            animation: dot-flicker 1.4s infinite ease-in-out both;
+        }
+        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+        .loading-dot:nth-child(3) { animation-delay: 0s; }
+
+        @keyframes dot-flicker {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- Main Container Card -->
+    <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight">HealthInsight AI</h1>
+            <p class="text-gray-500 mt-1 text-lg">Predictive Health Risk Assessment</p>
+        </header>
+
+        <!-- Dynamic Content Area -->
+        <div id="content-area">
+            <!-- Content will be injected here by JavaScript -->
+        </div>
+        
+    </div>
+
+    <!-- Global Message Box (used instead of alert/confirm) -->
+    <div id="message-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+            <h3 id="modal-title" class="text-xl font-bold mb-3 text-red-600">Error</h3>
+            <p id="modal-body" class="text-gray-700 mb-4"></p>
+            <button onclick="closeModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition duration-200">Close</button>
+        </div>
+    </div>
+
+
+    <script>
+        // Global state and constants
+        const contentArea = document.getElementById('content-area');
+        let selectedDisease = null;
+
+        const DISEASE_CONFIG = {
+            'diabetes': {
+                name: 'Diabetes Risk',
+                risk_threshold: 0.6, // Simulated threshold
+                inputs: [
+                    { id: 'pregnancies', label: 'Pregnancies (0-17)', type: 'number', min: 0, max: 17 },
+                    { id: 'glucose', label: 'Glucose (Plasma mg/dL) (70-200)', type: 'number', min: 70, max: 200 },
+                    { id: 'bloodPressure', label: 'Blood Pressure (mmHg) (50-120)', type: 'number', min: 50, max: 120 },
+                    { id: 'bmi', label: 'BMI (kg/m²) (15-50)', type: 'number', min: 15, max: 50, step: 0.1 },
+                    { id: 'age', label: 'Age (Years) (21-80)', type: 'number', min: 21, max: 80 },
+                ],
+                advice: {
+                    at_risk: `
+                        <p class="mb-3"><strong>⚠️ Immediate Action Required:</strong> Please consult a primary care physician or an endocrinologist as soon as possible for definitive testing (e.g., HbA1c test).</p>
+                        <h4 class="font-semibold text-lg text-red-700 mt-4 mb-2">Key Precautions & Lifestyle Changes:</h4>
+                        <ul class="list-disc list-inside space-y-1 ml-4 text-gray-700">
+                            <li>Eliminate sugary drinks and refined carbohydrates.</li>
+                            <li>Engage in at least 150 minutes of moderate-intensity exercise per week.</li>
+                            <li>Monitor your blood sugar levels regularly, if advised by a doctor.</li>
+                            <li>Focus on high-fiber foods, lean proteins, and healthy fats.</li>
+                        </ul>
+                    `,
+                    not_at_risk: `
+                        <p class="mb-3">Your risk assessment is low. Keep up the excellent work!</p>
+                        <h4 class="font-semibold text-lg text-green-700 mt-4 mb-2">Maintain Your Wellness:</h4>
+                        <ul class="list-disc list-inside space-y-1 ml-4 text-gray-700">
+                            <li>Maintain a balanced diet rich in vegetables, fruits, and whole grains.</li>
+                            <li>Regular physical activity (e.g., daily brisk walking).</li>
+                            <li>Manage stress effectively through mindfulness or hobbies.</li>
+                            <li>Get 7-9 hours of quality sleep nightly.</li>
+                        </ul>
+                    `
+                }
+            },
+            'breast-cancer': {
+                name: 'Breast Cancer Risk',
+                risk_threshold: 0.5, // Simulated threshold
+                inputs: [
+                    { id: 'clumpThickness', label: 'Clump Thickness (1-10)', type: 'number', min: 1, max: 10 },
+                    { id: 'cellUniformity', label: 'Uniformity of Cell Size (1-10)', type: 'number', min: 1, max: 10 },
+                    { id: 'marginalAdhesion', label: 'Marginal Adhesion (1-10)', type: 'number', min: 1, max: 10 },
+                    { id: 'epithelialSize', label: 'Single Epithelial Cell Size (1-10)', type: 'number', min: 1, max: 10 },
+                    { id: 'bareNuclei', label: 'Bare Nuclei (1-10)', type: 'number', min: 1, max: 10 },
+                ],
+                advice: {
+                    at_risk: `
+                        <p class="mb-3"><strong>⚠️ Immediate Action Required:</strong> Consult an oncologist or specialist for further diagnostic tests (e.g., mammogram, biopsy) based on your complete medical history.</p>
+                        <h4 class="font-semibold text-lg text-red-700 mt-4 mb-2">Key Precautions & Lifestyle Changes:</h4>
+                        <ul class="list-disc list-inside space-y-1 ml-4 text-gray-700">
+                            <li>Perform monthly self-examinations and report any changes immediately.</li>
+                            <li>Limit alcohol consumption and maintain a healthy weight.</li>
+                            <li>Increase intake of antioxidant-rich foods like berries and leafy greens.</li>
+                            <li>Discuss your family history and genetic testing options with a doctor.</li>
+                        </ul>
+                    `,
+                    not_at_risk: `
+                        <p class="mb-3">Your risk assessment is low. Continue proactive health management!</p>
+                        <h4 class="font-semibold text-lg text-green-700 mt-4 mb-2">Maintain Your Wellness:</h4>
+                        <ul class="list-disc list-inside space-y-1 ml-4 text-gray-700">
+                            <li>Adhere to recommended screening schedules (e.g., annual mammograms after age 40).</li>
+                            <li>Maintain a regular exercise schedule.</li>
+                            <li>Limit exposure to environmental toxins.</li>
+                            <li>Eat a Mediterranean-style diet.</li>
+                        </ul>
+                    `
+                }
+            }
+        };
+
+        // --- Utility Functions for UI Management ---
+
+        /**
+         * Shows the custom modal/message box.
+         * @param {string} title - The title of the modal.
+         * @param {string} body - The main content/message.
+         * @param {string} color - Tailwind color class for the title (e.g., 'text-red-600').
+         */
+        function showModal(title, body, color = 'text-red-600') {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-title').className = 'text-xl font-bold mb-3 ' + color;
+            document.getElementById('modal-body').textContent = body;
+            document.getElementById('message-modal').classList.remove('hidden');
+        }
+
+        /**
+         * Hides the custom modal/message box.
+         */
+        function closeModal() {
+            document.getElementById('message-modal').classList.add('hidden');
+        }
+
+
+        // --- Render Functions ---
+
+        /**
+         * Renders the initial disease selection page.
+         */
+        function renderSelection() {
+            selectedDisease = null;
+            contentArea.innerHTML = `
+                <h2 class="text-3xl font-semibold text-gray-800 mb-6 text-center">Select a Health Risk Assessment</h2>
+                <div class="flex flex-col md:flex-row gap-6 justify-center">
+
+                    <!-- Diabetes Card -->
+                    <div id="select-diabetes" class="disease-card bg-blue-50 hover:bg-blue-100 p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer w-full md:w-1/2" 
+                         onclick="selectDisease('diabetes')">
+                        <div class="text-center">
+                            <svg class="w-12 h-12 text-blue-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                            <h3 class="text-xl font-bold text-blue-800">Diabetes Risk</h3>
+                            <p class="text-gray-600 mt-2">Assess risk based on metabolic factors like glucose, BMI, and age.</p>
+                        </div>
+                    </div>
+
+                    <!-- Breast Cancer Card -->
+                    <div id="select-breast-cancer" class="disease-card bg-pink-50 hover:bg-pink-100 p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer w-full md:w-1/2" 
+                         onclick="selectDisease('breast-cancer')">
+                        <div class="text-center">
+                            <svg class="w-12 h-12 text-pink-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c1.657 0 3 .895 3 2s-1.343 2-3 2v5l-3 2v-5c-1.657 0-3-.895-3-2s1.343-2 3-2zM4.328 17.276a20.08 20.08 0 0110.875 0M10 10V5m4 5V5m-4 0h4m-4 0c-1.105 0-2 .895-2 2s.895 2 2 2h4c1.105 0 2-.895 2-2s-.895-2-2-2h-4z"></path></svg>
+                            <h3 class="text-xl font-bold text-pink-800">Breast Cancer Risk</h3>
+                            <p class="text-gray-600 mt-2">Check risk based on cell characteristics and clinical factors.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Renders the input form for the selected disease.
+         */
+        function renderForm() {
+            const config = DISEASE_CONFIG[selectedDisease];
+            if (!config) {
+                return renderSelection();
+            }
+
+            const inputFields = config.inputs.map(input => `
+                <div class="mb-5">
+                    <label for="${input.id}" class="block text-sm font-medium text-gray-700 mb-1">${input.label}</label>
+                    <input type="${input.type}" id="${input.id}" name="${input.id}"
+                           min="${input.min}" max="${input.max}" ${input.step ? 'step="' + input.step + '"' : ''}
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150" required>
+                    <p class="text-xs text-gray-400 mt-1">Range: ${input.min} to ${input.max}</p>
+                </div>
+            `).join('');
+
+            contentArea.innerHTML = `
+                <h2 class="text-3xl font-semibold text-gray-800 mb-2">${config.name} Assessment</h2>
+                <p class="text-gray-500 mb-6">Please enter your health metrics below for an AI-driven risk prediction.</p>
+
+                <form id="prediction-form" class="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                    ${inputFields}
+
+                    <div class="md:col-span-2 flex justify-between items-center pt-4 border-t mt-4">
+                        <button type="button" onclick="renderSelection()" class="flex items-center text-gray-600 hover:text-blue-600 transition duration-150">
+                            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                            Back
+                        </button>
+                        <button type="submit" id="predict-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition duration-200 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 flex items-center justify-center">
+                            Predict Risk
+                            <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        </button>
+                    </div>
+                </form>
+            `;
+
+            // Attach event listener to the form
+            document.getElementById('prediction-form').addEventListener('submit', handlePrediction);
+        }
+
+        /**
+         * Renders the loading state while simulating the API call.
+         */
+        function renderLoading() {
+            contentArea.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-64 text-center">
+                    <div class="flex space-x-2">
+                        <div class="loading-dot w-4 h-4 bg-blue-600 rounded-full"></div>
+                        <div class="loading-dot w-4 h-4 bg-blue-600 rounded-full"></div>
+                        <div class="loading-dot w-4 h-4 bg-blue-600 rounded-full"></div>
+                    </div>
+                    <p class="mt-6 text-xl font-semibold text-gray-700">Analyzing ${DISEASE_CONFIG[selectedDisease].name} data...</p>
+                    <p class="text-gray-500 mt-2">Running through pre-trained ML model (Simulated)</p>
+                </div>
+            `;
+        }
+
+
+        /**
+         * Renders the final result page with advice.
+         * @param {number} riskScore - The simulated risk score (0 to 1).
+         * @param {boolean} isHighRisk - Whether the score exceeds the risk threshold.
+         */
+        function renderResult(riskScore, isHighRisk) {
+            const config = DISEASE_CONFIG[selectedDisease];
+            const riskPercentage = (riskScore * 100).toFixed(2);
+            
+            const resultColor = isHighRisk ? 'bg-red-50 text-red-800 border-red-400' : 'bg-green-50 text-green-800 border-green-400';
+            const statusText = isHighRisk ? 'AT RISK' : 'LOW RISK';
+            const adviceContent = isHighRisk ? config.advice.at_risk : config.advice.not_at_risk;
+
+            contentArea.innerHTML = `
+                <h2 class="text-3xl font-semibold text-gray-800 mb-6 text-center">${config.name} Prediction Result</h2>
+
+                <!-- Status Summary Card -->
+                <div class="p-6 border-2 ${resultColor} rounded-xl shadow-lg mb-8 text-center">
+                    <p class="text-sm font-medium uppercase mb-2">Assessment Status</p>
+                    <div class="text-4xl font-extrabold mb-1">
+                        ${statusText}
+                    </div>
+                    <p class="text-lg">Calculated Risk Score: <span class="font-mono font-bold">${riskPercentage}%</span></p>
+                    <p class="text-sm mt-2 text-gray-600">(Threshold: ${(config.risk_threshold * 100).toFixed(0)}%)</p>
+                </div>
+
+                <!-- Advice and Next Steps -->
+                <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
+                    <h3 class="text-2xl font-bold ${isHighRisk ? 'text-red-600' : 'text-green-600'} mb-4">
+                        Next Steps & Recommendations
+                    </h3>
+                    <div class="text-base leading-relaxed custom-scrollbar max-h-96 overflow-y-auto pr-4">
+                        ${adviceContent}
+                        
+                        <h4 class="font-semibold text-lg text-blue-700 mt-6 mb-2 border-t pt-4">Disclaimer & Consultation:</h4>
+                        <p class="text-sm text-gray-600">This system provides an **estimated risk assessment** based on a simulated machine learning model. It is **not a diagnostic tool** and should not replace professional medical advice. Always consult a certified healthcare professional for diagnosis, treatment, and medical advice.</p>
+                    </div>
+                </div>
+
+                <div class="flex justify-center mt-8">
+                    <button onclick="renderSelection()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-8 rounded-full transition duration-200 transform hover:scale-105">
+                        Start New Assessment
+                    </button>
+                </div>
+            `;
+        }
+
+        // --- Controller/Event Handlers ---
+
+        /**
+         * Sets the selected disease and transitions to the form view.
+         * @param {string} diseaseKey - 'diabetes' or 'breast-cancer'.
+         */
+        function selectDisease(diseaseKey) {
+            selectedDisease = diseaseKey;
+            renderForm();
+        }
+
+        /**
+         * Handles form submission, simulates prediction, and displays results.
+         * @param {Event} event - The form submission event.
+         */
+        function handlePrediction(event) {
+            event.preventDefault();
+            const config = DISEASE_CONFIG[selectedDisease];
+            const formData = {};
+            let isValid = true;
+
+            // 1. Validation and Data Collection
+            config.inputs.forEach(input => {
+                const element = document.getElementById(input.id);
+                const value = parseFloat(element.value);
+                
+                if (isNaN(value) || value < input.min || value > input.max) {
+                    isValid = false;
+                    // Highlight error on the invalid field
+                    element.classList.add('border-red-500', 'ring-1', 'ring-red-500');
+                    element.classList.remove('border-gray-300');
+                } else {
+                    element.classList.remove('border-red-500', 'ring-1', 'ring-red-500');
+                    element.classList.add('border-gray-300');
+                    formData[input.id] = value;
+                }
+            });
+
+            if (!isValid) {
+                showModal('Validation Error', 'Please check all fields. Values must be within the specified ranges.', 'text-red-600');
+                return;
+            }
+
+            // 2. Simulate Backend Interaction (Loading State)
+            renderLoading();
+
+            // In a real application, you would send formData to the Flask/Django backend here:
+            // fetch('/api/predict', { method: 'POST', body: JSON.stringify(formData) })
+            //    .then(res => res.json()).then(data => renderResult(data.riskScore, data.isHighRisk))
+
+            // 3. Simulated Prediction Logic
+            setTimeout(() => {
+                // A simple simulation: high age, high glucose, and high BMI generally result in higher risk for diabetes.
+                // High values for the 5 breast cancer factors result in higher risk.
+
+                let scoreMultiplier = 0;
+                let totalRange = 0;
+
+                // Simple linear scaling simulation based on input values
+                config.inputs.forEach(input => {
+                    const value = formData[input.id];
+                    const range = input.max - input.min;
+                    const normalizedValue = (value - input.min) / range; // 0 to 1
+                    
+                    // Assign weights: Age/Glucose/Cell Uniformity are generally more important
+                    let weight = 1;
+                    if (input.id === 'age' || input.id === 'glucose' || input.id === 'cellUniformity') {
+                        weight = 1.5;
+                    }
+                    
+                    scoreMultiplier += normalizedValue * weight;
+                    totalRange += weight;
+                });
+                
+                // Calculate a score between 0 and 1
+                let riskScore = (scoreMultiplier / totalRange);
+                
+                // Add a small random noise to make repeated tests slightly different (simulation feature)
+                riskScore += (Math.random() * 0.1) - 0.05; 
+                riskScore = Math.min(1, Math.max(0, riskScore)); // Clamp between 0 and 1
+
+                const isHighRisk = riskScore > config.risk_threshold;
+
+                renderResult(riskScore, isHighRisk);
+            }, 1500); // Simulate 1.5 second API latency
+        }
+
+        // --- Initialization ---
+
+        // Start the application by rendering the selection page when the window loads
+        window.onload = renderSelection;
+
+    </script>
+
+</body>
+</html>
