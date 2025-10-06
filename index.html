@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Health Prediction System</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>🩺 Health Prediction System</h1>
+
+  <div class="card">
+    <label for="model">Select Model:</label>
+    <select id="model">
+      <option value="diabetes">Diabetes</option>
+      <option value="liver">Liver</option>
+      <option value="heart">Heart</option>
+      <option value="obesity">Obesity</option>
+    </select>
+
+    <input type="text" id="features" placeholder="Enter comma-separated values">
+    <button id="predictBtn">Predict</button>
+
+    <p id="result"></p>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
